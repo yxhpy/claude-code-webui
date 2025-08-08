@@ -1,0 +1,37 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# OS files
+.DS_Store
+
+# Local databases and runtime files
+accounts.db
+*.sqlite3
+
+# Logs
+*.log
+
+# Playwright cache
+playwright-report/
+
+# Node
+node_modules/
+
+# Editor
+.vscode/
+.idea/
+
+# Env files
+.env
+*.env
+claude-env.sh
+
+# Compiled
+*.so

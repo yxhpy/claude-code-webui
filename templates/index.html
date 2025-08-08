@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Claude Code 账号管理</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  </head>
+  <body>
+    <div class="container py-4">
+      <h1 class="mb-3">Claude Code 账号管理</h1>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="mb-3">
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      {% if not claude_installed %}
+        <div class="alert alert-danger" role="alert">
+          未检测到 Claude Code（VSCode 扩展或 CLI），请点击右侧“安装”。
+        </div>
+      {% elif claude_needs_upgrade %}
+        <div class="alert alert-warning" role="alert">
+          检测到新版本：当前 {{ claude_current_version }}，最新 {{ claude_latest_version }}。建议点击“升级”。
+        </div>
+      {% endif %}
+
+      <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+        <div class="me-2">
+          {% if claude_installed %}
+            <span class="badge text-bg-success">Claude Code 已安装（{{ claude_source }}）</span>
+            {% if claude_current_version %}
+              <span class="badge text-bg-secondary">当前: {{ claude_current_version }}</span>
+            {% endif %}
+          {% else %}
+            <span class="badge text-bg-danger">Claude Code 未安装</span>
+          {% endif %}
+          {% if claude_latest_version %}
+            <span class="badge text-bg-info">最新: {{ claude_latest_version }}</span>
+          {% endif %}
+        </div>
+
+        {% if not claude_installed %}
+          <a class="btn btn-outline-success" href="{{ url_for('install_claude') }}">安装</a>
+        {% endif %}
+        {% if claude_installed and claude_needs_upgrade %}
+          <a class="btn btn-outline-warning" href="{{ url_for('update_claude') }}">升级</a>
+        {% endif %}
+        {% if not ccui_on_path %}
+          <a class="btn btn-outline-dark" href="{{ url_for('install_ccui_route') }}">安装 ccui</a>
+        {% endif %}
+        <a class="btn btn-secondary ms-auto" href="{{ url_for('edit_mcp') }}">编辑 mcp.json</a>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">Claude Code 环境变量</div>
+        <div class="card-body">
+          <div><strong>ANTHROPIC_BASE_URL:</strong> <code>{{ env_baseurl or '未设置' }}</code></div>
+          <div><strong>ANTHROPIC_AUTH_TOKEN:</strong> <code>{{ env_apikey or '未设置' }}</code></div>
+          <div class="text-muted small mt-2">已生成环境文件：<code>{{ env_file_path }}</code>（可手动 <code>source {{ env_file_path }}</code> 生效于当前 Shell）</div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">新增账号（写入环境变量）</div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('add_account') }}" class="row g-3">
+            <div class="col-md-5">
+              <label class="form-label">Base URL</label>
+              <input name="baseurl" class="form-control" placeholder="https://api.example.com" required />
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">API Key</label>
+              <input name="apikey" class="form-control" placeholder="sk-..." required />
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <button class="btn btn-primary w-100" type="submit">添加</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">账号列表</div>
+        <div class="card-body p-0">
+          <table class="table table-striped mb-0">
+            <thead>
+              <tr>
+                <th style="width: 50px;">ID</th>
+                <th>Base URL</th>
+                <th>API Key</th>
+                <th style="width: 260px;">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for acc in accounts %}
+                <tr>
+                  <td>{{ acc.id }}</td>
+                  <td><code>{{ acc.baseurl }}</code></td>
+                  <td><code>{{ acc.apikey[:4] }}****{{ acc.apikey[-4:] if acc.apikey|length > 4 else '' }}</code></td>
+                  <td>
+                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('set_default', account_id=acc.id) }}">设为默认（写入环境变量）</a>
+                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('edit_account', account_id=acc.id) }}">编辑</a>
+                    <a class="btn btn-sm btn-outline-danger" href="{{ url_for('delete_account', account_id=acc.id) }}" onclick="return confirm('确认删除该账号？');">删除</a>
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="4" class="text-center text-muted">暂无账号</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <footer class="text-center text-muted mt-4">轻量版 · Flask + SQLite · 本地文件 mcp.json</footer>
+    </div>
+  </body>
+  </html>
+
+
