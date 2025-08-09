@@ -25,7 +25,7 @@ from flask_sqlalchemy import SQLAlchemy
 # 基本路径
 BASE_DIR: Path = Path(__file__).resolve().parent
 DB_PATH: Path = BASE_DIR / "accounts.db"
-# Claude Code MCP 配置路径：优先项目级、再用户级；可通过 CLAUDE_MCP_CONFIG 覆盖
+# MCP 配置路径：优先项目级、再用户级；可通过 MCP_CONFIG 覆盖
 ENV_FILE_PATH: Path = Path(os.environ.get("CLAUDE_ENV_FILE", str(Path.home() / ".claude-code-env")))
 
 # Claude Code 环境变量名
@@ -62,32 +62,56 @@ def get_mcp_config_path(for_write: bool = False) -> Path:
     if override_path:
         return Path(override_path).expanduser()
 
-    project_path = BASE_DIR / ".claude" / "mcp.json"
-    user_path = Path.home() / ".claude" / "mcp.json"
+    # Claude Code MCP配置优先级：
+    # 1. 项目级：.mcp.json (项目根目录)
+    # 2. 用户级：~/.claude.json
+    project_path = BASE_DIR / ".mcp.json"
+    user_claude_json = Path.home() / ".claude.json" 
 
     if for_write:
-        # 写入：若项目级已存在则写它，否则写用户级
-        return project_path if project_path.exists() else user_path
+        # 写入：优先项目级，其次用户级.claude.json
+        return project_path if project_path.exists() else user_claude_json
 
-    # 读取：优先项目级存在的文件，否则回退用户级
-    return project_path if project_path.exists() else user_path
+    # 读取：按优先级查找存在的文件
+    for path in [project_path, user_claude_json]:
+        if path.exists():
+            return path
+    
+    # 默认返回用户级路径（用于创建新配置）
+    return user_claude_json
 
 
 def read_mcp_json() -> dict:
-    path = get_mcp_config_path(for_write=False)
-    if not path.exists():
+    # 直接读取 ~/.claude.json 文件中的 mcpServers
+    claude_json_path = Path.home() / ".claude.json"
+    if not claude_json_path.exists():
         return {}
     try:
-        content = path.read_text(encoding="utf-8")
-        return json.loads(content) if content.strip() else {}
+        content = claude_json_path.read_text(encoding="utf-8")
+        data = json.loads(content) if content.strip() else {}
+        return data.get("mcpServers", {})
     except Exception:
         return {}
 
 
 def write_mcp_json(payload: dict) -> None:
-    path = get_mcp_config_path(for_write=True)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    # 直接更新 ~/.claude.json 文件中的 mcpServers
+    claude_json_path = Path.home() / ".claude.json"
+    claude_json_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # 读取现有配置
+    existing_data = {}
+    if claude_json_path.exists():
+        try:
+            existing_data = json.loads(claude_json_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing_data = {}
+    
+    # 直接更新 mcpServers
+    existing_data["mcpServers"] = payload
+    
+    # 写回文件
+    claude_json_path.write_text(json.dumps(existing_data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def set_default_account_to_mcp(account: Account) -> None:
@@ -463,6 +487,18 @@ def get_claude_code_status() -> dict:
 def index():
     accounts = Account.query.order_by(Account.id.desc()).all()
     mcp = read_mcp_json()  # 当前 Claude Code 路由/MCP 配置内容
+    # 调试：输出实际使用的配置文件路径
+    actual_path = get_mcp_config_path(for_write=False)
+    print(f"DEBUG: 实际读取的MCP配置文件路径: {actual_path}")
+    
+    # 如果找不到标准配置文件，尝试检查Cursor配置
+    cursor_mcp_path = Path.home() / ".cursor" / "mcp.json"
+    if not actual_path.exists() and cursor_mcp_path.exists():
+        print(f"DEBUG: 检测到Cursor MCP配置: {cursor_mcp_path}")
+        # 临时设置环境变量指向Cursor配置
+        os.environ["CLAUDE_MCP_CONFIG"] = str(cursor_mcp_path)
+        # 重新读取配置
+        mcp = read_mcp_json()
     # 当前环境变量（优先从 launchctl 读取，其次是当前进程）
     env_baseurl = launchctl_getenv(ENV_BASE_URL) or os.environ.get(ENV_BASE_URL, "")
     env_apikey = launchctl_getenv(ENV_AUTH_TOKEN) or os.environ.get(ENV_AUTH_TOKEN, "")
@@ -560,7 +596,7 @@ def edit_mcp():
     return render_template(
         "edit_mcp.html",
         mcp_raw=json.dumps(current, ensure_ascii=False, indent=2),
-        mcp_path=str(get_mcp_config_path(for_write=False)),
+        mcp_path=str(Path.home() / ".claude.json"),
     )
 
 

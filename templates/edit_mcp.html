@@ -6,7 +6,17 @@
     <title>编辑 mcp.json</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <style>
-      textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+      textarea { 
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; 
+      }
+      .json-valid { border-color: #28a745 !important; }
+      .json-invalid { border-color: #dc3545 !important; }
+      .format-status {
+        font-size: 0.875rem;
+        margin-top: 0.25rem;
+      }
+      .format-status.valid { color: #28a745; }
+      .format-status.invalid { color: #dc3545; }
     </style>
   </head>
   <body>
@@ -14,20 +24,19 @@
       <h1 class="mb-3">编辑 Claude Code 配置（路由/MCP）</h1>
 
       <div class="alert alert-info">
-        当前编辑的为 Claude Code 的 MCP 配置（优先项目级 <code>./.claude/mcp.json</code>，否则用户级 <code>~/.claude/mcp.json</code>；可用 <code>CLAUDE_MCP_CONFIG</code> 覆盖）。
-        它用于配置 MCP（Model Context Protocol）服务器（命令、参数、资源与环境变量等）。
+        当前编辑的是 <code>~/.claude.json</code> 文件中的 <strong>mcpServers</strong> 配置。
+        <br>修改后将直接更新到 <code>~/.claude.json</code> 文件的 mcpServers 部分。
+        <br><br>它用于配置 MCP（Model Context Protocol）服务器（命令、参数、资源与环境变量等）。
         请不要把 Claude Code 的 <code>baseurl</code>/<code>apikey</code> 写在这里；它们已通过环境变量
         <code>ANTHROPIC_BASE_URL</code> / <code>ANTHROPIC_AUTH_TOKEN</code> 进行管理。
-        如需在 MCP 配置中使用敏感值，请以环境变量占位的形式引用，例如：
+        <br>如需在 MCP 配置中使用敏感值，请以环境变量占位的形式引用，例如：
         <pre class="mb-0"><code>{
-  "mcpServers": {
-    "exampleServer": {
-      "command": "npx",
-      "args": ["-y", "example-mcp-server"],
-      "env": {
-        "API_KEY": "${ANTHROPIC_AUTH_TOKEN}",
-        "BASE_URL": "${ANTHROPIC_BASE_URL}"
-      }
+  "exampleServer": {
+    "command": "npx",
+    "args": ["-y", "example-mcp-server"],
+    "env": {
+      "API_KEY": "${ANTHROPIC_AUTH_TOKEN}",
+      "BASE_URL": "${ANTHROPIC_BASE_URL}"
     }
   }
 }</code></pre>
@@ -43,17 +52,124 @@
         {% endif %}
       {% endwith %}
 
-      <form method="post">
+      <form method="post" id="mcpForm">
         <div class="mb-3">
-          <label class="form-label">mcp.json 内容（路径：<code>{{ mcp_path }}</code>）</label>
-          <textarea name="mcp_raw" class="form-control" rows="16" spellcheck="false">{{ mcp_raw }}</textarea>
+          <label class="form-label">mcpServers 配置内容（路径：<code>{{ mcp_path }}</code>）</label>
+          <textarea id="mcpContent" name="mcp_raw" class="form-control" rows="16" spellcheck="false">{{ mcp_raw }}</textarea>
+          <div id="formatStatus" class="format-status"></div>
         </div>
         <div class="d-flex gap-2">
-          <button class="btn btn-primary" type="submit">保存</button>
+          <button id="formatBtn" class="btn btn-outline-secondary" type="button">格式化JSON</button>
+          <button id="saveBtn" class="btn btn-primary" type="submit">保存</button>
           <a class="btn btn-secondary" href="{{ url_for('index') }}">返回</a>
         </div>
       </form>
     </div>
+
+    <script>
+      const textarea = document.getElementById('mcpContent');
+      const formatStatus = document.getElementById('formatStatus');
+      const formatBtn = document.getElementById('formatBtn');
+      const saveBtn = document.getElementById('saveBtn');
+      const form = document.getElementById('mcpForm');
+
+      // 验证JSON格式
+      function validateJSON(text) {
+        try {
+          if (!text.trim()) {
+            return { valid: true, data: {}, message: 'JSON格式正确（空配置）' };
+          }
+          const data = JSON.parse(text);
+          return { valid: true, data: data, message: 'JSON格式正确' };
+        } catch (error) {
+          return { valid: false, data: null, message: `JSON格式错误: ${error.message}` };
+        }
+      }
+
+      // 更新UI状态
+      function updateStatus() {
+        const result = validateJSON(textarea.value);
+        
+        if (result.valid) {
+          textarea.classList.remove('json-invalid');
+          textarea.classList.add('json-valid');
+          formatStatus.className = 'format-status valid';
+          formatStatus.textContent = result.message;
+          saveBtn.disabled = false;
+          formatBtn.disabled = false;
+        } else {
+          textarea.classList.remove('json-valid');
+          textarea.classList.add('json-invalid');
+          formatStatus.className = 'format-status invalid';
+          formatStatus.textContent = result.message;
+          saveBtn.disabled = true;
+          formatBtn.disabled = true;
+        }
+      }
+
+      // 格式化JSON
+      function formatJSON() {
+        const result = validateJSON(textarea.value);
+        if (result.valid) {
+          try {
+            const formatted = JSON.stringify(result.data, null, 2);
+            textarea.value = formatted;
+            updateStatus();
+          } catch (error) {
+            console.error('格式化失败:', error);
+          }
+        }
+      }
+
+      // 自动格式化功能
+      function autoFormat() {
+        const result = validateJSON(textarea.value);
+        if (result.valid && textarea.value.trim()) {
+          // 延迟格式化，避免打字时频繁格式化
+          clearTimeout(window.autoFormatTimer);
+          window.autoFormatTimer = setTimeout(() => {
+            const currentValue = textarea.value;
+            const formatted = JSON.stringify(result.data, null, 2);
+            // 只有当格式化后的内容与当前内容不同时才更新
+            if (currentValue !== formatted) {
+              const cursorPosition = textarea.selectionStart;
+              textarea.value = formatted;
+              // 尝试保持光标位置
+              textarea.setSelectionRange(cursorPosition, cursorPosition);
+              updateStatus();
+            }
+          }, 1000); // 1秒后自动格式化
+        }
+      }
+
+      // 事件监听器
+      textarea.addEventListener('input', function() {
+        updateStatus();
+        autoFormat();
+      });
+
+      formatBtn.addEventListener('click', formatJSON);
+
+      // 表单提交前验证
+      form.addEventListener('submit', function(e) {
+        const result = validateJSON(textarea.value);
+        if (!result.valid) {
+          e.preventDefault();
+          alert('JSON格式不正确，请修复后再保存');
+          return false;
+        }
+      });
+
+      // 页面加载时初始化
+      document.addEventListener('DOMContentLoaded', function() {
+        updateStatus();
+        // 如果初始内容是有效的JSON，自动格式化
+        const result = validateJSON(textarea.value);
+        if (result.valid && textarea.value.trim()) {
+          formatJSON();
+        }
+      });
+    </script>
   </body>
   </html>
 
