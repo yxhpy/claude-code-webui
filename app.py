@@ -1438,23 +1438,23 @@ def launch_claude_terminal():
             # Windows: 启动新的命令提示符窗口
             # 构建启动命令，设置环境变量并显示提示信息
             startup_script = f"""
-echo Claude Code 环境已配置完成！
+echo Claude Code Environment Setup Complete!
 echo.
 echo Base URL: {env_baseurl}
 echo API Token: {env_apikey[:8]}...{env_apikey[-4:] if len(env_apikey) > 12 else env_apikey}
 echo.
-echo 正在设置PATH环境变量...
+echo Setting PATH environment variable...
 set PATH=%USERPROFILE%\\AppData\\Roaming\\npm;%PATH%
 echo.
-echo 测试 Claude CLI 可用性...
+echo Testing Claude CLI availability...
 claude --version
 echo.
-echo 现在你可以直接使用以下命令:
-echo   claude --version     （检查版本）
-echo   claude               （启动交互模式）
-echo   claude "your prompt" （直接发送提示）
+echo You can now use the following commands:
+echo   claude --version     (Check version)
+echo   claude               (Start interactive mode)
+echo   claude "your prompt" (Send direct prompt)
 echo.
-echo 如果 claude 命令仍然无法找到，请尝试:
+echo If claude command is still not found, try:
 echo   %USERPROFILE%\\AppData\\Roaming\\npm\\claude.cmd --version
 echo.
 """.strip()
@@ -1466,7 +1466,7 @@ set ANTHROPIC_BASE_URL={env_baseurl}
 set ANTHROPIC_AUTH_TOKEN={env_apikey}
 set PATH=%USERPROFILE%\\AppData\\Roaming\\npm;%PATH%
 {startup_script}
-echo 按任意键删除此临时文件并继续...
+echo Press any key to delete this temp file and continue...
 pause >nul
 del "%~f0" >nul 2>&1
 ''', encoding='utf-8')
@@ -1513,6 +1513,150 @@ end tell
         return redirect(url_for("index"))
     except Exception as e:
         flash(f"启动Claude命令行窗口失败: {str(e)}", "error")
+        return redirect(url_for("index"))
+
+
+@app.route("/get_project_directories")
+def get_project_directories():
+    """从.claude.json获取项目历史目录"""
+    try:
+        claude_json_path = Path.home() / ".claude.json"
+        if not claude_json_path.exists():
+            return {"directories": []}
+        
+        content = claude_json_path.read_text(encoding="utf-8")
+        data = json.loads(content) if content.strip() else {}
+        
+        projects = data.get("projects", {})
+        directories = []
+        
+        # 获取所有项目路径，去重并排序
+        for project_path in projects.keys():
+            if Path(project_path).exists():  # 只包含存在的路径
+                directories.append(project_path)
+        
+        # 去重并按路径名排序
+        directories = sorted(list(set(directories)))
+        
+        return {"directories": directories}
+    except Exception as e:
+        return {"directories": [], "error": str(e)}
+
+
+@app.route("/launch_claude_in_directory", methods=["POST"])
+def launch_claude_in_directory():
+    """在指定目录启动Claude Code"""
+    directory = request.form.get("directory", "").strip()
+    
+    if not directory:
+        flash("未指定目录", "danger")
+        return redirect(url_for("index"))
+    
+    # 验证目录是否存在
+    try:
+        dir_path = Path(directory)
+        if not dir_path.exists():
+            flash(f"目录不存在: {directory}", "danger")
+            return redirect(url_for("index"))
+        if not dir_path.is_dir():
+            flash(f"指定的路径不是目录: {directory}", "danger")
+            return redirect(url_for("index"))
+    except Exception as e:
+        flash(f"目录路径无效: {str(e)}", "danger")
+        return redirect(url_for("index"))
+    
+    try:
+        # 获取当前默认账户
+        env_baseurl = os.environ.get(ENV_BASE_URL, "") or launchctl_getenv(ENV_BASE_URL)
+        env_apikey = os.environ.get(ENV_AUTH_TOKEN, "") or launchctl_getenv(ENV_AUTH_TOKEN)
+        
+        # 如果环境变量未设置，尝试使用数据库中的第一个账户
+        if not env_baseurl or not env_apikey:
+            accounts = Account.query.all()
+            if accounts:
+                account = accounts[0]
+                env_baseurl = account.baseurl
+                env_apikey = account.apikey
+                apply_env_settings(env_baseurl, env_apikey)
+            else:
+                flash("没有可用的账户信息，请先添加账户并设为默认", "danger")
+                return redirect(url_for("index"))
+        
+        # 准备环境变量
+        env = os.environ.copy()
+        env[ENV_BASE_URL] = env_baseurl
+        env[ENV_AUTH_TOKEN] = env_apikey
+        
+        if platform.system() == "Windows":
+            # Windows: 在指定目录启动Claude Code
+            startup_script = f"""
+echo Claude Code Environment Setup Complete!
+echo.
+echo Working Directory: {directory}
+echo Base URL: {env_baseurl}
+echo API Token: {env_apikey[:8]}...{env_apikey[-4:] if len(env_apikey) > 12 else env_apikey}
+echo.
+echo Starting Claude Code...
+cd /d "{directory}"
+set PATH=%USERPROFILE%\\AppData\\Roaming\\npm;%PATH%
+claude
+""".strip()
+            
+            # 创建临时批处理文件
+            temp_bat = Path.home() / "claude_startup_dir.bat"
+            temp_bat.write_text(f'''@echo off
+set ANTHROPIC_BASE_URL={env_baseurl}
+set ANTHROPIC_AUTH_TOKEN={env_apikey}
+set PATH=%USERPROFILE%\\AppData\\Roaming\\npm;%PATH%
+{startup_script}
+echo.
+echo Claude Code session ended, press any key to close window...
+pause >nul
+del "%~f0" >nul 2>&1
+''', encoding='utf-8')
+            
+            # 启动新的命令提示符窗口，并切换到指定目录
+            cmd = ["cmd", "/k", str(temp_bat)]
+            subprocess.Popen(cmd, env=env, cwd=str(directory), creationflags=subprocess.CREATE_NEW_CONSOLE)
+            flash(f"已在目录 {directory} 启动Claude Code终端", "success")
+        else:
+            # macOS/Linux
+            if platform.system() == "Darwin":  # macOS
+                script = f'''
+tell application "Terminal"
+    activate
+    do script "cd '{directory}' && export {ENV_BASE_URL}='{env_baseurl}' && export {ENV_AUTH_TOKEN}='{env_apikey}' && echo 'Claude Code 环境已配置，工作目录: {directory}' && claude"
+end tell
+'''
+                subprocess.run(["osascript", "-e", script], check=False)
+                flash(f"已在目录 {directory} 启动Claude Code终端", "success")
+            else:
+                # Linux
+                terminals = ["gnome-terminal", "konsole", "xterm", "x-terminal-emulator"]
+                terminal_found = False
+                
+                for terminal in terminals:
+                    try:
+                        if terminal == "gnome-terminal":
+                            cmd = [terminal, "--working-directory", str(directory), "--", "bash", "-c", f"export {ENV_BASE_URL}='{env_baseurl}' && export {ENV_AUTH_TOKEN}='{env_apikey}' && echo 'Claude Code 环境已配置，工作目录: {directory}' && claude"]
+                        elif terminal == "konsole":
+                            cmd = [terminal, "--workdir", str(directory), "-e", "bash", "-c", f"export {ENV_BASE_URL}='{env_baseurl}' && export {ENV_AUTH_TOKEN}='{env_apikey}' && echo 'Claude Code 环境已配置，工作目录: {directory}' && claude"]
+                        else:
+                            cmd = [terminal, "-e", "bash", "-c", f"cd '{directory}' && export {ENV_BASE_URL}='{env_baseurl}' && export {ENV_AUTH_TOKEN}='{env_apikey}' && echo 'Claude Code 环境已配置，工作目录: {directory}' && claude"]
+                        
+                        subprocess.Popen(cmd, env=env)
+                        flash(f"已在目录 {directory} 启动Claude Code终端", "success")
+                        terminal_found = True
+                        break
+                    except FileNotFoundError:
+                        continue
+                
+                if not terminal_found:
+                    flash("未找到可用的终端模拟器", "warning")
+        
+        return redirect(url_for("index"))
+    except Exception as e:
+        flash(f"启动Claude Code失败: {str(e)}", "error")
         return redirect(url_for("index"))
 
 

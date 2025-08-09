@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Claude Code 账号管理</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   </head>
   <body>
@@ -71,15 +72,44 @@
         {% if claude_installed and claude_needs_upgrade %}
           <a class="btn btn-outline-warning" href="{{ url_for('update_claude') }}">升级</a>
         {% endif %}
+        
+        <!-- 合并的ccui管理按钮 -->
         {% if not ccui_on_path %}
-          <a class="btn btn-outline-dark" href="{{ url_for('install_ccui_route') }}">安装 ccui</a>
+          <form method="post" action="{{ url_for('install_ccui_route') }}" class="d-inline">
+            <button class="btn btn-outline-primary" type="submit">
+              <i class="bi bi-download"></i> 安装 ccui
+            </button>
+          </form>
+        {% else %}
+          <form method="post" action="{{ url_for('force_reinstall_ccui_route') }}" class="d-inline">
+            <button class="btn btn-outline-secondary" type="submit" 
+                    onclick="return confirm('确认重新安装ccui？这将删除现有文件并重新创建。')" 
+                    title="ccui已安装，点击重新安装">
+              <i class="bi bi-arrow-clockwise"></i> 重装 ccui
+            </button>
+          </form>
         {% endif %}
-        <form method="post" action="{{ url_for('force_reinstall_ccui_route') }}" class="d-inline">
-          <button class="btn btn-outline-warning btn-sm" type="submit" onclick="return confirm('确认强制重新安装ccui？这将删除现有文件并重新创建。')">强制重装ccui</button>
-        </form>
-        <form method="post" action="{{ url_for('launch_claude_terminal') }}" class="d-inline">
-          <button class="btn btn-outline-info btn-sm" type="submit" title="启动配置了环境变量的Claude命令行窗口">🖥️ 启动Claude终端</button>
-        </form>
+        
+        <!-- 启动Claude终端按钮 -->
+        <div class="dropdown d-inline">
+          <button class="btn btn-info dropdown-toggle" type="button" id="claudeTerminalDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="启动Claude Code终端">
+            🖥️ 启动Claude终端
+          </button>
+          <ul class="dropdown-menu" aria-labelledby="claudeTerminalDropdown">
+            <li><h6 class="dropdown-header">选择工作目录</h6></li>
+            <li><a class="dropdown-item" href="#" onclick="selectCustomDirectory()">
+              <i class="bi bi-folder"></i> 选择自定义目录
+            </a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><h6 class="dropdown-header">项目历史目录</h6></li>
+            <li><a class="dropdown-item" href="#" onclick="launchClaudeInDirectory('{{ "E:\\project\\claude-code-webui" | replace("\\", "\\\\") }}')">
+              <i class="bi bi-folder-fill"></i> {{ "E:\\project\\claude-code-webui" }}
+            </a></li>
+            <div id="project-history-dirs">
+              <!-- 这里会动态加载项目历史目录 -->
+            </div>
+          </ul>
+        </div>
         <a class="btn btn-secondary ms-auto" href="{{ url_for('edit_mcp') }}">编辑 mcp.json</a>
       </div>
 
@@ -235,6 +265,62 @@
         document.body.appendChild(form);
         form.submit();
       }
+    }
+
+    // 启动Claude终端相关函数
+    function selectCustomDirectory() {
+      const directory = prompt('请输入目录路径:', 'E:\\');
+      if (directory && directory.trim()) {
+        launchClaudeInDirectory(directory.trim());
+      }
+    }
+
+    function launchClaudeInDirectory(directory) {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/launch_claude_in_directory';
+      
+      const dirInput = document.createElement('input');
+      dirInput.type = 'hidden';
+      dirInput.name = 'directory';
+      dirInput.value = directory;
+      form.appendChild(dirInput);
+      
+      document.body.appendChild(form);
+      form.submit();
+    }
+
+    // 页面加载时获取项目历史目录
+    document.addEventListener('DOMContentLoaded', function() {
+      loadProjectHistoryDirectories();
+    });
+
+    function loadProjectHistoryDirectories() {
+      fetch('/get_project_directories')
+        .then(response => response.json())
+        .then(data => {
+          const container = document.getElementById('project-history-dirs');
+          container.innerHTML = '';
+          
+          if (data.directories && data.directories.length > 0) {
+            data.directories.forEach(dir => {
+              const li = document.createElement('li');
+              li.innerHTML = `<a class="dropdown-item" href="#" onclick="launchClaudeInDirectory('${dir.replace(/\\/g, '\\\\')}')">
+                <i class="bi bi-folder"></i> ${dir}
+              </a>`;
+              container.appendChild(li);
+            });
+          } else {
+            const li = document.createElement('li');
+            li.innerHTML = '<span class="dropdown-item-text text-muted">暂无项目历史</span>';
+            container.appendChild(li);
+          }
+        })
+        .catch(error => {
+          console.error('获取项目目录失败:', error);
+          const container = document.getElementById('project-history-dirs');
+          container.innerHTML = '<li><span class="dropdown-item-text text-muted">加载失败</span></li>';
+        });
     }
     </script>
   </body>

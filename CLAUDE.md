@@ -15,14 +15,28 @@ pip install -r requirements.txt
 
 # For development with virtual environment (recommended):
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate  # Linux/macOS
+# .venv\Scripts\activate   # Windows
 pip install -r requirements.txt
+```
+
+### Installation Methods
+```bash
+# Method 1: Run directly from source
+python app.py
+
+# Method 2: Install as package (for production/distribution)
+pip install -e .
+ccui-web  # Uses the installed package entry point
 ```
 
 ### Running the Application
 ```bash
-# Start the development server
+# Development: Run from root directory
 python app.py
+
+# Production: Run installed package
+ccui-web
 ```
 The app runs on `http://127.0.0.1:5000` by default.
 
@@ -30,6 +44,13 @@ The app runs on `http://127.0.0.1:5000` by default.
 ```bash
 # Run all tests
 pytest -q
+
+# Run specific test files
+pytest tests/test_versions.py -v
+pytest tests/test_playwright.py -v
+
+# Run with coverage (if needed)
+pytest --tb=short
 ```
 Tests include:
 - Version parsing and comparison logic (`test_versions.py`)
@@ -38,10 +59,11 @@ Tests include:
 ## Architecture
 
 ### Core Components
-- **Flask App** (`app.py`): Main application with SQLite database for account management
+- **Flask App**: Dual structure with root `app.py` (development) and `ccui_web/app.py` (package)
 - **SQLAlchemy Model**: `Account` model stores baseurl/apikey pairs in `accounts.db`
-- **Templates** (`templates/`): Jinja2 HTML templates for the web interface
+- **Templates** (`ccui_web/templates/`): Jinja2 HTML templates for the web interface
 - **Environment Management**: Handles Claude Code environment variables and `ccui` script installation
+- **Background Threading**: Automatic version checking and caching system
 
 ### Key Functionality
 1. **Account Management**: Store/edit multiple Claude Code accounts (baseurl + API key pairs)
@@ -51,10 +73,12 @@ Tests include:
 5. **ccui Integration**: Install and configure the `ccui` wrapper script
 
 ### File Structure
-- `app.py`: Main Flask application (680+ lines)
-- `accounts.db`: SQLite database (auto-created)
-- `templates/`: HTML templates for web UI
+- `app.py`: Development entry point (root level)
+- `ccui_web/app.py`: Package entry point (production)
+- `ccui_web/templates/`: HTML templates for web UI
+- `accounts.db`: SQLite database (auto-created in `~/.ccui-web/` by default)
 - `tests/`: pytest test suite
+- `scripts/`: Windows-specific utility scripts
 - `~/.claude-code-env`: Generated environment file
 - `.claude/mcp.json` or `~/.claude/mcp.json`: MCP configuration
 
@@ -70,12 +94,21 @@ Tests include:
 ### Path Configuration
 - `CLAUDE_ENV_FILE`: Override default environment file path
 - `CLAUDE_MCP_CONFIG`: Override MCP config file path
+- `CCUI_DATA_DIR`: Override default data directory (default: `~/.ccui-web`)
+- `CCUI_DB_PATH`: Override database file location
 
 ### Testing/Demo Overrides
 - `FORCE_LATEST_VERSION`: Override NPM version check
 - `FORCE_CLAUDE_STATUS`: Inject fixed status JSON for testing
 
 ## Important Implementation Details
+
+### Package Structure
+The application has a dual structure to support both development and distribution:
+- **Development**: Run `python app.py` from project root for local development
+- **Package**: Install with `pip install -e .` and run `ccui-web` command
+- Both entry points use the same Flask app from `ccui_web.app` module
+- Templates are packaged within `ccui_web/templates/` for proper distribution
 
 ### Version Management System
 The app implements semantic version parsing and comparison for Claude Code updates. It checks both CLI (`claude -v`) and VSCode extension versions, with NPM registry integration for latest version detection.
