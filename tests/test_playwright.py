@@ -11,8 +11,12 @@ def run_server_with_status(env_status: dict, port: int = 5001):
     env["HOST"] = "127.0.0.1"
     env["PORT"] = str(port)
     # 使用项目虚拟环境 Python 启动 app.py
+    # 兼容 Windows：.venv/Scripts/python.exe
+    venv_python = os.path.join(os.getcwd(), ".venv", "bin", "python")
+    if os.name == "nt":
+        venv_python = os.path.join(os.getcwd(), ".venv", "Scripts", "python.exe")
     proc = subprocess.Popen([
-        os.path.join(os.getcwd(), ".venv", "bin", "python"),
+        venv_python,
         "app.py",
     ], env=env)
     time.sleep(1.8)
