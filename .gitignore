@@ -1,37 +1,26 @@
-# Virtual environments
+# Bytecode
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Venv
 .venv/
 venv/
 
-# Python cache
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
+# DB
+accounts.db
 
-# OS files
+# Build
+dist/
+build/
+*.egg-info/
+
+# OS
 .DS_Store
 
-# Local databases and runtime files
-accounts.db
-*.sqlite3
-
-# Logs
-*.log
-
-# Playwright cache
-playwright-report/
+# Env
+.env
+.ccahe
 
 # Node
 node_modules/
-
-# Editor
-.vscode/
-.idea/
-
-# Env files
-.env
-*.env
-claude-env.sh
-
-# Compiled
-*.so

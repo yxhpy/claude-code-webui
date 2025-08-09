@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ccui-web"
+version = "0.1.1"
+description = "Web UI for managing Claude Code env and MCP configs"
+authors = [{ name = "Your Name" }]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "Flask==3.0.3",
+  "Flask-SQLAlchemy==3.1.1",
+  "SQLAlchemy==2.0.30",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/your-repo"
+
+[project.scripts]
+ccui-web = "ccui_web.app:main"
+
+[tool.setuptools]
+include-package-data = true
+packages = ["ccui_web"]
+
+[tool.setuptools.package-data]
+ccui_web = [
+  "templates/*.html",
+]

@@ -21,12 +21,16 @@ from flask import (
 )
 from flask_sqlalchemy import SQLAlchemy
 
+# 运行时定位包内模板目录
+PACKAGE_DIR: Path = Path(__file__).resolve().parent
+DEFAULT_TEMPLATE_FOLDER = str(PACKAGE_DIR / "templates")
 
 # 基本路径与数据目录（确保可写）
 BASE_DIR: Path = Path(__file__).resolve().parent
 DATA_DIR: Path = Path(os.environ.get("CCUI_DATA_DIR", str(Path.home() / ".ccui-web")))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH: Path = Path(os.environ.get("CCUI_DB_PATH", str(DATA_DIR / "accounts.db")))
+
 # MCP 配置路径：优先项目级、再用户级；可通过 MCP_CONFIG 覆盖
 ENV_FILE_PATH: Path = Path(os.environ.get("CLAUDE_ENV_FILE", str(Path.home() / ".claude-code-env")))
 
@@ -34,10 +38,7 @@ ENV_FILE_PATH: Path = Path(os.environ.get("CLAUDE_ENV_FILE", str(Path.home() / "
 ENV_BASE_URL = "ANTHROPIC_BASE_URL"
 ENV_AUTH_TOKEN = "ANTHROPIC_AUTH_TOKEN"
 
-
-# 统一使用包内模板目录，避免顶层 templates 冗余
-PACKAGE_TEMPLATE_DIR = Path(__file__).resolve().parent / "ccui_web" / "templates"
-app = Flask(__name__, template_folder=str(PACKAGE_TEMPLATE_DIR))
+app = Flask(__name__, template_folder=DEFAULT_TEMPLATE_FOLDER)
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key")
@@ -70,7 +71,7 @@ def get_mcp_config_path(for_write: bool = False) -> Path:
     # 1. 项目级：.mcp.json (项目根目录)
     # 2. 用户级：~/.claude.json
     project_path = BASE_DIR / ".mcp.json"
-    user_claude_json = Path.home() / ".claude.json" 
+    user_claude_json = Path.home() / ".claude.json"
 
     if for_write:
         # 写入：优先项目级，其次用户级.claude.json
@@ -80,7 +81,7 @@ def get_mcp_config_path(for_write: bool = False) -> Path:
     for path in [project_path, user_claude_json]:
         if path.exists():
             return path
-    
+
     # 默认返回用户级路径（用于创建新配置）
     return user_claude_json
 
@@ -102,7 +103,7 @@ def write_mcp_json(payload: dict) -> None:
     # 直接更新 ~/.claude.json 文件中的 mcpServers
     claude_json_path = Path.home() / ".claude.json"
     claude_json_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # 读取现有配置
     existing_data = {}
     if claude_json_path.exists():
@@ -110,10 +111,10 @@ def write_mcp_json(payload: dict) -> None:
             existing_data = json.loads(claude_json_path.read_text(encoding="utf-8"))
         except Exception:
             existing_data = {}
-    
+
     # 直接更新 mcpServers
     existing_data["mcpServers"] = payload
-    
+
     # 写回文件
     claude_json_path.write_text(json.dumps(existing_data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -151,6 +152,7 @@ def apply_env_settings(baseurl: str, apikey: str) -> None:
 
 
 # ---- ccui 工具安装与检测 ----
+
 def generate_ccui_script() -> str:
     script = f"""#!/bin/zsh
 set -euo pipefail
@@ -494,7 +496,7 @@ def index():
     # 调试：输出实际使用的配置文件路径
     actual_path = get_mcp_config_path(for_write=False)
     print(f"DEBUG: 实际读取的MCP配置文件路径: {actual_path}")
-    
+
     # 如果找不到标准配置文件，尝试检查Cursor配置
     cursor_mcp_path = Path.home() / ".cursor" / "mcp.json"
     if not actual_path.exists() and cursor_mcp_path.exists():
@@ -722,9 +724,3 @@ def main() -> None:
             t.start()
 
     app.run(host=host, port=port, debug=debug_flag, use_reloader=use_reloader)
-
-
-if __name__ == "__main__":
-    main()
-
-
