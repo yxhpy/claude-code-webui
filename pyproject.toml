@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ccui-web"
-version = "0.1.1"
+version = "0.1.2"
 description = "Web UI for managing Claude Code env and MCP configs"
 authors = [{ name = "Your Name" }]
 readme = "README.md"
